@@ -54,8 +54,11 @@ async function main() {
   const hwnd = findWindow(CITRIX_WINDOW);
   if (hwnd){
     console.log(`Citrix window "${CITRIX_WINDOW}" is already open. Trying to login.`);
-    await monitorCitrixLogin(password);
+    await monitorCitrixLogin(password, null);
   }
+
+  // Pre-load the login-screen template image in parallel with browser launch
+  const templatePromise = loadTemplate();
 
   console.log("Launching browser in incognito mode...");
   const browser = await puppeteer.launch({
@@ -300,8 +303,9 @@ async function main() {
   //await new Promise((r) => setTimeout(r, 5000));
   //await browser.close();
 
-  // Step 10: Monitor Citrix VM and auto-login
-  await monitorCitrixLogin(password);
+  // Step 10: Monitor Citrix VM and auto-login (template already pre-loaded)
+  const template = await templatePromise;
+  await monitorCitrixLogin(password, template);
 
   console.log("Done!");
 }
@@ -328,9 +332,11 @@ async function loadTemplate() {
  * - Searches for the login screen icon and types the password
  * - Resizes back and waits for the window to close
  */
-async function monitorCitrixLogin(password) {
-  const template = await loadTemplate();
-  if (!template) return;
+async function monitorCitrixLogin(password, template) {
+  if (!template) {
+    template = await loadTemplate();
+    if (!template) return;
+  }
 
   console.log(`\n=== Citrix VM Login Monitor ===`);
   console.log(`Watching for "${CITRIX_WINDOW}"...\n`);
@@ -344,7 +350,7 @@ async function monitorCitrixLogin(password) {
   let attempt = 0;
   for (;;) {
     attempt++;
-    await sleep(1000);
+    await sleep(500);
 
     const hwnd = findWindow(CITRIX_WINDOW);
     if (!hwnd){
@@ -360,18 +366,18 @@ async function monitorCitrixLogin(password) {
     }
 
     // Window exists — wait until it's ready (pixel check), but skip after 3s
-    let pixelOk = false;
-    for (let i = 0; i < 3; i++) {
-      if (pixelMatch(hwnd, PIXEL_X, PIXEL_Y, PIX_R, PIX_G, PIX_B, 15)) {
-        pixelOk = true;
-        break;
-      }
-      console.log(`Pixel check does not match yet... Waiting (${i + 1}/3).`);
-      await sleep(1000);
-    }
-    if (!pixelOk) {
-      console.log("Pixel check timed out — continuing anyway.");
-    }
+    // let pixelOk = false;
+    // for (let i = 0; i < 10; i++) {
+    //   if (pixelMatch(hwnd, PIXEL_X, PIXEL_Y, PIX_R, PIX_G, PIX_B, 15)) {
+    //     pixelOk = true;
+    //     break;
+    //   }
+    //   console.log(`Pixel check does not match yet... Waiting (${i + 1}/10).`);
+    //   await sleep(500);
+    // }
+    // if (!pixelOk) {
+    //   console.log("Pixel check timed out — continuing anyway.");
+    // }
     console.log("Citrix window detected and loaded.");
 
     // Resize +1px width (triggers a redraw, same as AHK)
@@ -382,7 +388,7 @@ async function monitorCitrixLogin(password) {
     const centerX = rect.x + Math.floor(rect.w / 2);
     const centerY = rect.y + Math.floor(rect.h / 2);
     clickAt(centerX, centerY);
-    await sleep(500);
+    await sleep(150);
 
     // Search for login screen icon
     console.log("Searching for login screen...");
@@ -392,7 +398,7 @@ async function monitorCitrixLogin(password) {
       const sh = SEARCH_Y2 - SEARCH_Y;
       found = imageSearch(hwnd, template, SEARCH_X, SEARCH_Y, sw, sh, 15);
       if (found) break;
-      await sleep(500);
+      await sleep(200);
       // Abort if window disappeared
       if (!isWindow(hwnd)) break;
     }
@@ -414,9 +420,9 @@ async function monitorCitrixLogin(password) {
 
     // Click on the login icon (password field) — click twice with delay for Citrix RDP latency
     clickAt(screenX, screenY);
-    await sleep(500);
+    await sleep(200);
     clickAt(screenX, screenY);
-    await sleep(500);
+    await sleep(200);
 
     // Type password via scan codes + Enter
     sendString(password);
@@ -424,14 +430,13 @@ async function monitorCitrixLogin(password) {
     sendEnter();
 
     // Resize back to original
-    await sleep(3000);
+    await sleep(1000);
     moveWindow(hwnd, rect.x, rect.y, rect.w, rect.h);
 
     // Wait for the Citrix window to close
     console.log("Waiting for Citrix session to close...");
-    await sleep(1000);
     while (isWindow(hwnd)) {
-      await sleep(1000);
+      await sleep(5000);
     }
     console.log("Citrix window closed.");
     // Loop back to watch for a new session
