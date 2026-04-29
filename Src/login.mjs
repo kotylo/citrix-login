@@ -115,12 +115,13 @@ async function main() {
       const all = document.body?.innerText || "";
       return all.includes("Approve sign in") ||
              all.includes("Verify your identity") ||
-             all.includes("I can't use");
+             all.includes("I can't use") ||
+             all.includes("Sign in another way");
     },
     { timeout: 20000 }
   );
-  await new Promise((r) => setTimeout(r, 1000));
 
+  await new Promise((r) => setTimeout(r, 1000));
   // Check if SMS button is already visible (variant B), otherwise click the "I can't use" link first (variant A)
   const hasSmsButton = await page.evaluate(() => {
     const buttons = [...document.querySelectorAll("div[role='button'], button")];
@@ -131,7 +132,7 @@ async function main() {
     console.log('Clicking "I can\'t use my Microsoft Authenticator app right now"...');
     await page.evaluate(() => {
       const links = [...document.querySelectorAll("a, button, [role='button']")];
-      const link = links.find((l) => l.textContent?.includes("I can't use"));
+      const link = links.find((l) => l.textContent?.includes("I can't use") || l.textContent?.includes("Sign in another way"));
       link?.click();
     });
 
@@ -170,18 +171,11 @@ async function main() {
     const ac = new AbortController();
     const rl = createInterface({ input: stdin, output: stdout });
 
-    let pollInterval;
-    const smsGonePromise = new Promise((resolve) => {
-      pollInterval = setInterval(async () => {
-        const visible = await page.evaluate(() => {
-          const el = document.querySelector('input[name="otc"]');
-          return el && el.offsetParent !== null;
-        });
-        if (!visible) {
-          clearInterval(pollInterval);
-          resolve();
-        }
-      }, 1000);
+    const smsGonePromise = page.waitForFunction(
+      () => !document.querySelector('input[name="otc"]')?.offsetParent,
+      { timeout: 15000 }
+    ).catch(err => {
+      console.error("SMS wait failed:", err);
     });
 
     const questionPromise = rl.question("Enter SMS code: ", { signal: ac.signal });
@@ -192,7 +186,6 @@ async function main() {
         .catch((err) => (err.name === "AbortError" ? { type: "aborted" } : Promise.reject(err))),
       smsGonePromise.then(() => ({ type: "gone" })),
     ]);
-    clearInterval(pollInterval);
     ac.abort();
     rl.close();
 
