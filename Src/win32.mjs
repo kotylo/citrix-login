@@ -77,6 +77,7 @@ const GetDC = user32.func("GetDC", HDC, [HWND]);
 const ReleaseDC = user32.func("ReleaseDC", "int", [HWND, HDC]);
 const SendInput = user32.func("SendInput", "uint32", ["uint32", "void *", "int"]);
 const SetCursorPos = user32.func("SetCursorPos", "int", ["int", "int"]);
+const GetCursorPos = user32.func("GetCursorPos", "bool", ["POINT*"]);
 const IsWindow = user32.func("IsWindow", "int", [HWND]);
 const GetWindowTextW = user32.func("GetWindowTextW", "int", [HWND, koffi.out("str16"), "int"]);
 const GetWindowTextLengthW = user32.func("GetWindowTextLengthW", "int", [HWND]);
@@ -326,6 +327,21 @@ export function pixelMatch(hwnd, x, y, targetR, targetG, targetB, tolerance = 15
     Math.abs(p.g - targetG) <= tolerance &&
     Math.abs(p.b - targetB) <= tolerance
   );
+}
+
+/** Move the mouse to screen coordinates. */
+export function moveMouse(screenX, screenY) {
+  SetCursorPos(screenX, screenY);
+}
+
+/** Get the current mouse position in screen coordinates. */
+export function getMousePos() {
+  const pt = Buffer.alloc(koffi.sizeof(POINT));
+  if (GetCursorPos(pt)) {
+    const { x, y } = koffi.decode(pt, 0, POINT);
+    return { x, y };
+  }
+  return null;
 }
 
 /** Click at screen coordinates. */

@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import {
   findWindow, isWindow, setForeground, getWindowRect, moveWindow,
   pixelMatch, imageSearch, clickAt, sendCtrlA, sendString, sendEnter,
+  moveMouse, getMousePos
 } from "./win32.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -377,6 +378,10 @@ async function monitorCitrixLogin(password, template) {
     const rect = getWindowRect(hwnd);
     moveWindow(hwnd, rect.x, rect.y, rect.w + 1, rect.h);
 
+    // Save mouse position and restore later
+    const origMouse = getMousePos();
+    console.log("Saved original mouse position:", origMouse);
+
     // Click inside the VM to activate it (needed for image to render)
     const centerX = rect.x + Math.floor(rect.w / 2);
     const centerY = rect.y + Math.floor(rect.h / 2);
@@ -416,6 +421,12 @@ async function monitorCitrixLogin(password, template) {
     await sleep(200);
     clickAt(screenX, screenY);
     await sleep(200);
+
+    // Restore mouse position to avoid interfering with user
+    if (origMouse) {
+      console.log(`Restoring mouse position`);
+      moveMouse(origMouse.x, origMouse.y);
+    }
 
     // Type password via scan codes + Enter
     sendString(password);
